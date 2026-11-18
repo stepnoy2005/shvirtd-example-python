@@ -1,0 +1,27 @@
+# --- ЭТАП 1: Сборка зависимостей ---
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+# Создаем виртуальное окружение и активируем его через PATH
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Копируем список библиотек и устанавливаем их
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# --- ЭТАП 2: Финальный легкий образ ---
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Забираем только готовые библиотеки из первого этапа
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Копируем весь код проекта (ненужное отсеет .dockerignore)
+COPY . .
+
+# Запускаем веб-сервер согласно заданию
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]

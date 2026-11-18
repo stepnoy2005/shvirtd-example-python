@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+venv
+__pycache__
+*.pyc
+Dockerfile*
+*.yaml
+*.yml
+*.md
+*.pdf
+LICENSE
+nginx/
+haproxy/
