@@ -1,6 +1,5 @@
 from datetime import datetime
 import os
-import re
 from contextlib import contextmanager, asynccontextmanager
 
 import mysql.connector
@@ -11,30 +10,26 @@ from typing import Optional
 # --- 1. Конфигурация ---
 # Считываем конфигурацию БД из переменных окружения
 db_host = os.environ.get('DB_HOST', '127.0.0.1')
-db_port = int(os.environ.get('DB_PORT', 3306))  # ИЗМЕНЕНИЕ: добавлен порт
 db_user = os.environ.get('DB_USER', 'app')
 db_password = os.environ.get('DB_PASSWORD', 'very_strong')
 db_name = os.environ.get('DB_NAME', 'example')
 
-# ИЗМЕНЕНИЕ: считываем имя таблицы из ENV (по умолчанию 'requests') и проверяем безопасность имени
-table_name = os.environ.get('TABLE_NAME', 'requests')
-if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
-    raise ValueError("Недопустимое имя таблицы в переменной TABLE_NAME")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Код, который выполнится перед запуском приложения
     print("Приложение запускается...")
     if ensure_table_exists():
-        print(f"Соединение с БД установлено и таблица '{table_name}' готова к работе.")
+        print("Соединение с БД установлено и таблица 'requests' готова к работе.")
     else:
         print("БД недоступна при старте. Таблица будет создана при первом запросе.")
-
+    
     yield
-
+    
+    # Код, который выполнится при остановке приложения
     print("Приложение останавливается.")
 
 
+# Создаем экземпляр FastAPI с использованием lifespan
 app = FastAPI(
     title="Shvirtd Example FastAPI",
     description="Учебный проект, FastAPI+Docker.",
@@ -50,7 +45,6 @@ def get_db_connection():
     try:
         db = mysql.connector.connect(
             host=db_host,
-            port=db_port,  # ИЗМЕНЕНИЕ: передаем порт в коннектор
             user=db_user,
             password=db_password,
             database=db_name
@@ -63,12 +57,12 @@ def get_db_connection():
 
 # --- 2.1. Функция создания таблицы ---
 def ensure_table_exists():
-    """Создает таблицу если она не существует"""
+    """Создает таблицу requests если она не существует"""
     try:
         with get_db_connection() as db:
             cursor = db.cursor()
             create_table_query = f"""
-            CREATE TABLE IF NOT EXISTS {db_name}.{table_name} (
+            CREATE TABLE IF NOT EXISTS {db_name}.requests (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 request_date DATETIME,
                 request_ip VARCHAR(255)
@@ -91,7 +85,7 @@ def get_client_ip(x_real_ip: Optional[str] = Header(None)):
 # --- 5. Основной эндпоинт ---
 @app.get("/")
 def index(request: Request, ip_address: Optional[str] = Depends(get_client_ip)):
-    final_ip = ip_address
+    final_ip = ip_address  # Только из X-Forwarded-For, без fallback
 
     now = datetime.now()
     current_time = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -99,7 +93,7 @@ def index(request: Request, ip_address: Optional[str] = Depends(get_client_ip)):
     try:
         with get_db_connection() as db:
             cursor = db.cursor()
-            query = f"INSERT INTO {table_name} (request_date, request_ip) VALUES (%s, %s)"
+            query = "INSERT INTO requests (request_date, request_ip) VALUES (%s, %s)"
             values = (current_time, final_ip)
             cursor.execute(query, values)
             db.commit()
@@ -108,14 +102,15 @@ def index(request: Request, ip_address: Optional[str] = Depends(get_client_ip)):
         ensure_table_exists()
         with get_db_connection() as db:
             cursor = db.cursor()
-            query = f"INSERT INTO {table_name} (request_date, request_ip) VALUES (%s, %s)"
+            query = "INSERT INTO requests (request_date, request_ip) VALUES (%s, %s)"
             values = (current_time, final_ip)
             cursor.execute(query, values)
             db.commit()
             cursor.close()
 
+    # Подсказка для студентов при неправильном обращении
     if final_ip is None:
-        ip_display = "похоже, что вы направляете запрос в неверный порт(например curl http://127.0.0.1:5000). Правильно использовать порт 8090"
+        ip_display = "похоже, что вы направляете запрос в неверный порт(например curl http://127.0.0.1:5000). Правильное выполнение задания - отправить запрос в порт 8090."
     else:
         ip_display = final_ip
 
@@ -138,15 +133,16 @@ def debug_headers(request: Request):
 # --- 6. Эндпоинт для просмотра записей в БД ---
 @app.get("/requests")
 def get_requests():
-    """Возвращает все записи из таблицы для проверки"""
+    """Возвращает все записи из таблицы requests для проверки"""
     try:
         with get_db_connection() as db:
             cursor = db.cursor()
-            query = f"SELECT id, request_date, request_ip FROM {table_name} ORDER BY id DESC LIMIT 50"
+            query = "SELECT id, request_date, request_ip FROM requests ORDER BY id DESC LIMIT 50"
             cursor.execute(query)
             records = cursor.fetchall()
             cursor.close()
-
+            
+            # Преобразуем записи в читабельный формат
             result = []
             for record in records:
                 result.append({
@@ -154,7 +150,7 @@ def get_requests():
                     "request_date": record[1].strftime("%Y-%m-%d %H:%M:%S") if record[1] else None,
                     "request_ip": record[2]
                 })
-
+            
             return {
                 "total_records": len(result),
                 "records": result
@@ -163,11 +159,12 @@ def get_requests():
         ensure_table_exists()
         with get_db_connection() as db:
             cursor = db.cursor()
-            query = f"SELECT id, request_date, request_ip FROM {table_name} ORDER BY id DESC LIMIT 50"
+            query = "SELECT id, request_date, request_ip FROM requests ORDER BY id DESC LIMIT 50"
             cursor.execute(query)
             records = cursor.fetchall()
             cursor.close()
-
+            
+            # Преобразуем записи в читабельный формат
             result = []
             for record in records:
                 result.append({
@@ -175,7 +172,7 @@ def get_requests():
                     "request_date": record[1].strftime("%Y-%m-%d %H:%M:%S") if record[1] else None,
                     "request_ip": record[2]
                 })
-
+            
             return {
                 "total_records": len(result),
                 "records": result
@@ -183,6 +180,8 @@ def get_requests():
 
 
 # --- 7. Запуск приложения ---
+# Для запуска этого файла используется ASGI-сервер, например, uvicorn.
+# Команда: uvicorn main:app --reload
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=5000)
