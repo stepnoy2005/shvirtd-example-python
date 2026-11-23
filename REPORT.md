@@ -18,3 +18,14 @@ https://github.com/stepnoy2005/shvirtd-example-python
 ### Результат SQL-запроса (локальный запуск)
 ![SQL запрос Задача 3](img/task3_sql.png)
 
+---
+
+## Задача 4
+* Развёрнута ВМ в Yandex Cloud, установлен Docker и Docker Compose.
+* Написан и выполнен скрипт автоматического развёртывания [`deploy.sh`](deploy.sh).
+
+### Проверка доступности сервиса через check-host.net
+![Проверка check-host](img/task4_check_host.png)
+
+### Результат SQL-запроса на сервере в Yandex Cloud
+![SQL запрос Задача 4](img/task4_sql.png)
